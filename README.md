@@ -393,3 +393,6 @@ This project is licensed under the MIT License.
 ---
 
 **Note**: This is a demonstration project for portfolio purposes. For production use, implement additional security measures, proper payment gateway integration, and comprehensive testing.
+
+ <!-- pydantic==2.5.0
+pydantic-settings==2.1.0 -->
