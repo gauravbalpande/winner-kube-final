@@ -44,6 +44,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, users, bets, payment
 from core.config import settings
 
+# ALB forwards /api/* to this service; we expose routes under /api.
+API_PREFIX = "/api"
+
 app = FastAPI(
     title="BetMasterX API",
     description="Production-grade betting platform API",
@@ -68,10 +71,10 @@ app.add_middleware(
 )
 
 # Include Routers - AFTER CORS MIDDLEWARE
-app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-app.include_router(users.router, prefix="/user", tags=["Users"])
-app.include_router(bets.router, prefix="/bets", tags=["Betting"])
-app.include_router(payment.router, prefix="/payment", tags=["Payment"])
+app.include_router(auth.router, prefix=f"{API_PREFIX}/auth", tags=["Authentication"])
+app.include_router(users.router, prefix=f"{API_PREFIX}/user", tags=["Users"])
+app.include_router(bets.router, prefix=f"{API_PREFIX}/bets", tags=["Betting"])
+app.include_router(payment.router, prefix=f"{API_PREFIX}/payment", tags=["Payment"])
 
 @app.get("/")
 async def root():
@@ -81,7 +84,7 @@ async def root():
         "status": "operational"
     }
 
-@app.get("/health")
+@app.get(f"{API_PREFIX}/health")
 async def health_check():
     return {"status": "healthy", "cors": "enabled"}
 

@@ -67,3 +67,11 @@ htmlcov/
 
 # OS
 Thumbs.db
+
+
+backend/.env
+frontend/.env*
+terraform/.env*
+terraform/*.tfvars
+terraform/*.tfstate
+.terraform/

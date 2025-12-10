@@ -33,27 +33,39 @@
 
 # CMD ["nginx", "-g", "daemon off;"]
 
-# Development stage
-FROM node:18-alpine AS development
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-EXPOSE 5173
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
-
 # Build stage
 FROM node:18-alpine AS build
 WORKDIR /app
+
+# Copy package files
 COPY package*.json ./
+
+# Install dependencies
 RUN npm ci
+
+# Copy source code
 COPY . .
+
+# Build application with production environment
+# Vite will use .env.production automatically
 RUN npm run build
 
-# Production stage
+# Production stage (default image)
 FROM nginx:alpine AS production
-COPY --from=build /app/dist /usr/share/nginx/html
+WORKDIR /usr/share/nginx/html
+
+# Copy built assets from builder
+COPY --from=build /app/dist .
+
+# Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Expose port 80
 EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=3s CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+
+# Start nginx
 CMD ["nginx", "-g", "daemon off;"]

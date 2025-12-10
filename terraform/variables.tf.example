@@ -1,0 +1,5 @@
+# Copy this file to terraform/terraform.tfvars and fill in your values
+
+frontend_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/betmasterx-frontend:latest"
+backend_image  = "123456789012.dkr.ecr.us-east-1.amazonaws.com/betmasterx-backend:latest"
+aws_region     = "us-east-1"
