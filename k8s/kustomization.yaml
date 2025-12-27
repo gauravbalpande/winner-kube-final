@@ -1,0 +1,22 @@
+# Kustomization file for organizing manifests
+# Useful for ArgoCD integration later
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: betmasterx
+
+resources:
+  - namespace.yaml
+  - backend-deployment.yaml
+  - backend-service.yaml
+  - frontend-deployment.yaml
+  - frontend-service.yaml
+  - ingress.yaml
+  - ecr-secret.yaml
+  # secrets.yaml should be added manually (not committed to git)
+
+commonLabels:
+  app: betmasterx
+  managed-by: kustomize
+
+

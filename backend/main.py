@@ -39,18 +39,23 @@
 # ===================================================================
 # FILE: backend/main.py (FIXED CORS)
 # ===================================================================
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, users, bets, payment
 from core.config import settings
 
-# ALB forwards /api/* to this service; we expose routes under /api.
-API_PREFIX = "/api"
+# Determine API prefix based on environment
+# In production (behind ALB), ALB forwards /api/* to this service
+# In development (docker-compose), we serve directly without prefix
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+API_PREFIX = "/api" if ENVIRONMENT == "production" else ""
 
 app = FastAPI(
     title="BetMasterX API",
     description="Production-grade betting platform API",
-    version="1.0.0"
+    version="1.0.0",
+    root_path=API_PREFIX if ENVIRONMENT == "production" else ""
 )
 
 # CORS Configuration - MUST BE BEFORE ROUTES
@@ -81,12 +86,19 @@ async def root():
     return {
         "message": "Welcome to BetMasterX API",
         "version": "1.0.0",
-        "status": "operational"
+        "status": "operational",
+        "environment": ENVIRONMENT,
+        "api_prefix": API_PREFIX
     }
 
+# Health check endpoint - available at both /health and /api/health
+@app.get("/health")
+async def health_check_dev():
+    return {"status": "healthy", "environment": ENVIRONMENT}
+
 @app.get(f"{API_PREFIX}/health")
-async def health_check():
-    return {"status": "healthy", "cors": "enabled"}
+async def health_check_prod():
+    return {"status": "healthy", "environment": ENVIRONMENT}
 
 # Additional OPTIONS handlers for debugging
 @app.options("/auth/register")

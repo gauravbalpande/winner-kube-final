@@ -9,6 +9,11 @@ terraform {
   }
 }
 
+# Configure AWS Provider
+provider "aws" {
+  region = var.aws_region
+}
+
 # Variables
 variable "aws_region" {
   description = "AWS region for resources"
@@ -52,11 +57,83 @@ data "aws_vpc" "default" {
   default = true
 }
 
+# Get all subnets in the default VPC
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.default.id]
   }
+}
+
+# Get subnet details to filter by availability zone
+data "aws_subnet" "default" {
+  for_each = toset(data.aws_subnets.default.ids)
+  id       = each.value
+}
+
+# Get availability zones
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+# Select subnets from at least 2 different AZs
+locals {
+  # Group existing subnets by AZ
+  subnets_by_az = {
+    for subnet_id, subnet in data.aws_subnet.default : subnet.availability_zone => subnet_id...
+  }
+  
+  # Get unique availability zones from existing subnets
+  existing_azs = keys(local.subnets_by_az)
+  
+  # Get first 2 available AZs (we need at least 2 for ALB)
+  required_azs = slice(data.aws_availability_zones.available.names, 0, 2)
+  
+  # Determine which AZs need new subnets (if we have less than 2 AZs with subnets)
+  need_additional_subnets = length(local.existing_azs) < 2
+  azs_needing_subnets = local.need_additional_subnets ? [
+    for az in local.required_azs : az if !contains(local.existing_azs, az)
+  ] : []
+}
+
+# Create additional subnets if needed (for ALB requirement of 2+ AZs)
+resource "aws_subnet" "additional" {
+  for_each = toset(local.azs_needing_subnets)
+  
+  vpc_id            = data.aws_vpc.default.id
+  availability_zone = each.value
+  # Use a safe CIDR block calculation (offset by 100 to avoid conflicts)
+  cidr_block        = cidrsubnet(data.aws_vpc.default.cidr_block, 8, 100 + index(local.required_azs, each.value))
+  
+  map_public_ip_on_launch = true
+  
+  tags = {
+    Name = "${var.app_name}-subnet-${substr(each.value, -1, 1)}"
+    Environment = var.environment
+  }
+}
+
+# Combine existing and newly created subnets for ALB
+locals {
+  # Collect all subnet IDs by AZ
+  all_subnet_ids_by_az = {
+    # Existing subnets
+    for az, subnet_ids in local.subnets_by_az : az => subnet_ids
+  }
+  
+  # Add newly created subnets
+  final_subnets_by_az = merge(
+    local.all_subnet_ids_by_az,
+    {
+      for az, subnet in aws_subnet.additional : az => [subnet.id]
+    }
+  )
+  
+  # Select one subnet from each of the first 2 required AZs
+  selected_subnets = [
+    local.final_subnets_by_az[local.required_azs[0]][0],
+    local.final_subnets_by_az[local.required_azs[1]][0]
+  ]
 }
 
 # CloudWatch Log Groups
@@ -169,7 +246,7 @@ resource "aws_lb" "main" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = data.aws_subnets.default.ids
+  subnets            = local.selected_subnets
 
   enable_deletion_protection = false
 
@@ -385,7 +462,7 @@ resource "aws_ecs_service" "frontend" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = data.aws_subnets.default.ids
+    subnets          = local.selected_subnets
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = true
   }
@@ -416,7 +493,7 @@ resource "aws_ecs_service" "backend" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = data.aws_subnets.default.ids
+    subnets          = local.selected_subnets
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = true
   }

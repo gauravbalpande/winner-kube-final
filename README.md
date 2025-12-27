@@ -244,6 +244,20 @@ betmasterx/
 │   │   └── ...
 │   ├── package.json
 │   └── vite.config.js
+├── k8s/                       # Kubernetes manifests
+│   ├── namespace.yaml         # Namespace definition
+│   ├── backend-deployment.yaml
+│   ├── backend-service.yaml
+│   ├── frontend-deployment.yaml
+│   ├── frontend-service.yaml
+│   ├── ingress.yaml           # Ingress configuration
+│   ├── secrets.yaml.template  # Secrets template
+│   ├── kustomization.yaml     # Kustomize config
+│   ├── deploy.sh              # Deployment script
+│   └── README.md              # K8s deployment guide
+├── terraform/                 # Infrastructure as Code
+│   ├── main.tf                # Terraform configuration
+│   └── ...
 ├── db/
 │   └── migrations/
 │       └── 001_initial_schema.sql  # Database schema
@@ -303,6 +317,42 @@ git push heroku main
 3. Deploy to ECS/Cloud Run/App Service
 4. Configure environment variables
 5. Set up load balancer & SSL
+
+### Kubernetes Deployment
+
+The project includes complete Kubernetes manifests for deployment on any Kubernetes cluster (EKS, GKE, AKS, or local).
+
+**Quick Start:**
+
+```bash
+cd k8s
+
+# Create secrets from template
+cp secrets.yaml.template secrets.yaml
+# Edit secrets.yaml with your values
+
+# Deploy using the script
+./deploy.sh
+
+# Or deploy manually
+kubectl apply -f .
+```
+
+**Features:**
+- ✅ Complete Kubernetes manifests (Deployments, Services, Ingress)
+- ✅ Health checks and resource limits configured
+- ✅ Secrets management with templates
+- ✅ ECR registry secret support
+- ✅ ALB Ingress Controller support (AWS EKS)
+- ✅ Kustomization file for ArgoCD integration
+- ✅ Ready for Prometheus & Grafana monitoring
+
+**For detailed Kubernetes deployment instructions, see [k8s/README.md](k8s/README.md)**
+
+**Future Integrations:**
+- ⏳ ArgoCD for GitOps deployments
+- ⏳ Prometheus for metrics collection
+- ⏳ Grafana for visualization dashboards
 
 ## 📊 Database Schema
 

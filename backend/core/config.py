@@ -1,4 +1,6 @@
-from pydantic_settings import BaseSettings
+# Act as setting for backend 
+from pydantic_settings import BaseSettings  # for reading the environment variables
+
 from typing import List
 
 class Settings(BaseSettings):

@@ -16,27 +16,41 @@ services:
     volumes:
       - ./backend:/app
     restart: unless-stopped
+    # Override CMD for development with hot reload
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - betmasterx-network
 
   # Frontend (React + Vite)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      target: development
+      target: development  # Use development for Vite dev server
+      # target: production  # Use production for nginx (port 80)
     container_name: betmasterx_frontend
     ports:
-      - "5173:5173"
+      - "5173:5173"  # Vite dev server port (development)
+      # - "80:80"    # Nginx port (production)
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=/api
+      - NODE_ENV=development
+      - DOCKER_ENV=true
     volumes:
       - ./frontend:/app
       - /app/node_modules
     restart: unless-stopped
     depends_on:
       - backend
+    networks:
+      - betmasterx-network
+
+networks:
+  betmasterx-network:
+    driver: bridge
 

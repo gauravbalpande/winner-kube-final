@@ -75,3 +75,8 @@ terraform/.env*
 terraform/*.tfvars
 terraform/*.tfstate
 .terraform/
+
+# Kubernetes secrets
+k8s/secrets.yaml
+k8s/*.secret.yaml
+k8s/*-secret.yaml
