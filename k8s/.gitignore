@@ -1,6 +1,0 @@
-# Kubernetes secrets - DO NOT COMMIT
-secrets.yaml
-*.secret.yaml
-*-secret.yaml
-
-

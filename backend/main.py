@@ -55,7 +55,7 @@ app = FastAPI(
     title="BetMasterX API",
     description="Production-grade betting platform API",
     version="1.0.0",
-    root_path=API_PREFIX if ENVIRONMENT == "production" else ""
+    # root_path=API_PREFIX if ENVIRONMENT == "production" else ""
 )
 
 # CORS Configuration - MUST BE BEFORE ROUTES
@@ -103,5 +103,7 @@ async def health_check_prod():
 # Additional OPTIONS handlers for debugging
 @app.options("/auth/register")
 @app.options("/auth/login")
+async def options_login():
+    return {"status": "ok"}
 async def options_handler():
     return {"status": "ok"}

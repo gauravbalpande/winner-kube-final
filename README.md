@@ -4,17 +4,17 @@ A complete 3-tier web application showcasing DevOps, MCP (Model Context Protocol
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                      Frontend Layer                      │
+│                      Frontend Layer                     │
 │            React + Tailwind CSS + Lucide Icons          │
-│              Authentication & Game Interface             │
+│              Authentication & Game Interface            │
 └─────────────────────────────────────────────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────┐
-│                    Backend Layer (API)                   │
-│                    FastAPI + Python                      │
+│                    Backend Layer (API)                  │
+│                    FastAPI + Python                     │
 │        ┌──────────────────────────────────────┐         │
-│        │  Routers (Auth, Users, Bets, Pay)   │         │
+│        │  Routers (Auth, Users, Bets, Pay)    │         │
 │        └──────────────────────────────────────┘         │
 │        ┌──────────────────────────────────────┐         │
 │        │  Services (Business Logic)           │         │
@@ -26,8 +26,8 @@ A complete 3-tier web application showcasing DevOps, MCP (Model Context Protocol
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────┐
-│                    Database Layer                        │
-│              Supabase (PostgreSQL)                       │
+│                    Database Layer                       │
+│              Supabase (PostgreSQL)                      │
 │    Tables: users, wallets, bets                         │
 └─────────────────────────────────────────────────────────┘
 ```
