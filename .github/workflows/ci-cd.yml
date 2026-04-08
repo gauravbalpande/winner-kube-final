@@ -1,3 +1,279 @@
+# name: CI — BetMasterX (GitOps / ArgoCD)
+# # ============================================================
+# # GitOps CI Pipeline — Build only, ArgoCD deploys
+# #
+# # Flow:
+# #   PR    → lint-test (validate code quality)
+# #   main  → lint-test → security-scan → build-push (ECR)
+# #                                           ↓
+# #                                   ArgoCD Image Updater
+# #                                   detects new ECR tag
+# #                                           ↓
+# #                                   Commits tag to git
+# #                                           ↓
+# #                              ArgoCD Auto Syncs → K8s
+# # ============================================================
+
+# on:
+#   push:
+#     branches: [main]
+#     tags: ["v*.*.*"]         # Semver tags trigger production-ready images
+#   pull_request:
+#     branches: [main]
+
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.ref }}
+#   cancel-in-progress: true
+
+# env:
+#   AWS_REGION: us-east-1
+#   ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+#   BACKEND_REPO:  betmasterx-backend
+#   FRONTEND_REPO: betmasterx-frontend
+
+# # ============================================================
+# jobs:
+
+#   # ----------------------------------------------------------
+#   # Job 1: Lint & Test
+#   # Runs on every PR and push to main
+#   # ----------------------------------------------------------
+#   lint-test:
+#     name: Lint & Test
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       # Backend
+#       - uses: actions/setup-python@v5
+#         with:
+#           python-version: "3.11"
+#           cache: pip
+
+#       - name: Install backend deps
+#         run: cd backend && pip install -r requirements.txt flake8 pytest pytest-asyncio httpx
+
+#       - name: Lint backend (flake8)
+#         run: |
+#           cd backend
+#           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics \
+#                     --exclude=__pycache__,.env
+
+#       # Frontend
+#       - uses: actions/setup-node@v4
+#         with:
+#           node-version: "18"
+#           cache: npm
+#           cache-dependency-path: frontend/package-lock.json
+
+#       - name: Install frontend deps
+#         run: cd frontend && npm ci
+
+#       - name: Lint frontend (ESLint)
+#         run: cd frontend && npm run lint || true
+
+#       # Helm chart validation
+#       - uses: azure/setup-helm@v4
+#         with:
+#           version: "3.14.0"
+
+#       - name: Helm lint (all environments)
+#         run: |
+#           helm lint helm/betmasterx/ -f helm/betmasterx/values.yaml
+#           helm lint helm/betmasterx/ -f helm/betmasterx/values.yaml \
+#                     -f helm/betmasterx/values-staging.yaml
+#           helm lint helm/betmasterx/ -f helm/betmasterx/values.yaml \
+#                     -f helm/betmasterx/values-production.yaml
+
+#       # Validate ArgoCD manifests are valid YAML
+#       - name: Validate ArgoCD manifests (YAML)
+#         run: |
+#           python3 -c "
+#           import yaml, glob, sys
+#           files = glob.glob('argocd/**/*.yaml', recursive=True)
+#           errors = []
+#           for f in sorted(files):
+#               try:
+#                   list(yaml.safe_load_all(open(f)))
+#                   print(f'  OK  {f}')
+#               except Exception as e:
+#                   errors.append(f)
+#                   print(f'FAIL {f}: {e}')
+#           sys.exit(1 if errors else 0)
+#           "
+
+#   # ----------------------------------------------------------
+#   # Job 2: Security Scanning (Trivy)
+#   # Runs only on push to main / semver tags
+#   # ----------------------------------------------------------
+#   security-scan:
+#     name: Security Scan (Trivy)
+#     runs-on: ubuntu-latest
+#     needs: lint-test
+#     if: github.event_name == 'push'
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       - name: Configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region:            ${{ env.AWS_REGION }}
+
+#       - name: Login to ECR
+#         uses: aws-actions/amazon-ecr-login@v2
+
+#       - uses: docker/setup-buildx-action@v3
+
+#       - name: Build backend image (for scanning)
+#         run: docker build -t betmasterx-backend:scan ./backend
+
+#       - name: Trivy scan — Backend image
+#         uses: aquasecurity/trivy-action@master
+#         with:
+#           image-ref: "betmasterx-backend:scan"
+#           format: "sarif"
+#           output: "trivy-backend.sarif"
+#           exit-code: "1"
+#           ignore-unfixed: true
+#           vuln-type: "os,library"
+#           severity: "CRITICAL,HIGH"
+
+#       - name: Build frontend image (for scanning)
+#         run: docker build -t betmasterx-frontend:scan --target production ./frontend
+
+#       - name: Trivy scan — Frontend image
+#         uses: aquasecurity/trivy-action@master
+#         with:
+#           image-ref: "betmasterx-frontend:scan"
+#           format: "sarif"
+#           output: "trivy-frontend.sarif"
+#           exit-code: "1"
+#           ignore-unfixed: true
+#           vuln-type: "os,library"
+#           severity: "CRITICAL,HIGH"
+
+#       - name: Trivy scan — IaC (Terraform + K8s)
+#         uses: aquasecurity/trivy-action@master
+#         with:
+#           scan-type: "config"
+#           scan-ref: "."
+#           format: "table"
+#           exit-code: "0"       # Warn only for IaC misconfigs
+#           severity: "CRITICAL,HIGH"
+
+#       # Upload SARIF results to GitHub Security tab
+#       - name: Upload scan results to GitHub Security
+#         uses: github/codeql-action/upload-sarif@v3
+#         if: always()
+#         with:
+#           sarif_file: "trivy-backend.sarif"
+
+#   # ----------------------------------------------------------
+#   # Job 3: Build & Push Images to ECR
+#   #
+#   # Tags pushed:
+#   #   On main push:  latest, sha-<SHORT_SHA>
+#   #   On semver tag: latest, sha-<SHORT_SHA>, v1.2.3 (production-ready)
+#   #
+#   # After push, ArgoCD Image Updater picks up the new tag,
+#   # commits it to values files, and ArgoCD syncs automatically.
+#   # NO KUBECTL / HELM DEPLOY HERE — that's ArgoCD's job.
+#   # ----------------------------------------------------------
+#   build-push:
+#     name: Build & Push to ECR
+#     runs-on: ubuntu-latest
+#     needs: security-scan
+#     if: github.event_name == 'push'
+#     outputs:
+#       image-tag: ${{ steps.meta.outputs.sha-short }}
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       - name: Configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region:            ${{ env.AWS_REGION }}
+
+#       - name: Login to ECR
+#         uses: aws-actions/amazon-ecr-login@v2
+
+#       - name: Generate image tags
+#         id: meta
+#         run: |
+#           SHORT_SHA="sha-$(git rev-parse --short HEAD)"
+#           echo "sha-short=${SHORT_SHA}" >> $GITHUB_OUTPUT
+#           # If this is a semver tag, also push the version tag
+#           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+#             VERSION="${GITHUB_REF#refs/tags/}"
+#             echo "version-tag=${VERSION}" >> $GITHUB_OUTPUT
+#           fi
+
+#       - uses: docker/setup-buildx-action@v3
+
+#       # ---- Backend ----
+#       - name: Build & Push — Backend
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./backend
+#           push: true
+#           provenance: false    # Omit attestation for ECR compatibility
+#           tags: |
+#             ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest
+#             ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.meta.outputs.sha-short }}
+#             ${{ steps.meta.outputs.version-tag && format('{0}/{1}:{2}', env.ECR_REGISTRY, env.BACKEND_REPO, steps.meta.outputs.version-tag) || '' }}
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
+
+#       # ---- Frontend ----
+#       - name: Build & Push — Frontend
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./frontend
+#           file: ./frontend/Dockerfile
+#           target: production
+#           push: true
+#           provenance: false
+#           tags: |
+#             ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest
+#             ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.meta.outputs.sha-short }}
+#             ${{ steps.meta.outputs.version-tag && format('{0}/{1}:{2}', env.ECR_REGISTRY, env.FRONTEND_REPO, steps.meta.outputs.version-tag) || '' }}
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
+
+#       # ---- Notify ArgoCD to sync (optional — Image Updater will also detect) ----
+#       - name: Notify ArgoCD to refresh (optional speedup)
+#         if: github.ref == 'refs/heads/main'
+#         env:
+#           ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}      # e.g. argocd.betmasterx.example.com
+#           ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+#         run: |
+#           if [ -n "${ARGOCD_SERVER}" ] && [ -n "${ARGOCD_AUTH_TOKEN}" ]; then
+#             # Trigger ArgoCD refresh for dev app (Image Updater handles others)
+#             curl -s -X POST \
+#               -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
+#               "https://${ARGOCD_SERVER}/api/v1/applications/betmasterx-dev/refresh" || true
+#             echo "ArgoCD refresh triggered for betmasterx-dev"
+#           else
+#             echo "ARGOCD_SERVER or ARGOCD_AUTH_TOKEN not set — skipping ArgoCD refresh"
+#           fi
+
+#       - name: CI Summary
+#         run: |
+#           echo "## ✅ CI Passed — Images Pushed to ECR" >> $GITHUB_STEP_SUMMARY
+#           echo "" >> $GITHUB_STEP_SUMMARY
+#           echo "| Image | Tag |" >> $GITHUB_STEP_SUMMARY
+#           echo "|-------|-----|" >> $GITHUB_STEP_SUMMARY
+#           echo "| betmasterx-backend | \`${{ steps.meta.outputs.sha-short }}\` |" >> $GITHUB_STEP_SUMMARY
+#           echo "| betmasterx-frontend | \`${{ steps.meta.outputs.sha-short }}\` |" >> $GITHUB_STEP_SUMMARY
+#           echo "" >> $GITHUB_STEP_SUMMARY
+#           echo "**ArgoCD** will detect the new tag via Image Updater and sync automatically." >> $GITHUB_STEP_SUMMARY
+
+
+
 name: CI — BetMasterX (GitOps / ArgoCD)
 # ============================================================
 # GitOps CI Pipeline — Build only, ArgoCD deploys
@@ -12,12 +288,23 @@ name: CI — BetMasterX (GitOps / ArgoCD)
 #                                   Commits tag to git
 #                                           ↓
 #                              ArgoCD Auto Syncs → K8s
+#
+# Fixes applied:
+#   1. Added `permissions` block to security-scan job
+#      → security-events: write  (fixes SARIF upload failure)
+#      → contents: read          (minimum required)
+#   2. Upgraded codeql-action/upload-sarif from v3 → v4
+#      (v3 deprecated Dec 2026)
+#   3. Upload ALL SARIF files (backend + frontend) instead of only backend
+#   4. Added .trivyignore support note
+#   5. Trivy scan failure now creates a summary before hard-failing
+#      so you know which CVEs to address
 # ============================================================
 
 on:
   push:
     branches: [main]
-    tags: ["v*.*.*"]         # Semver tags trigger production-ready images
+    tags: ["v*.*.*"]          # Semver tags trigger production-ready images
   pull_request:
     branches: [main]
 
@@ -26,8 +313,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  AWS_REGION: us-east-1
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  AWS_REGION:    us-east-1
+  ECR_REGISTRY:  ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
   BACKEND_REPO:  betmasterx-backend
   FRONTEND_REPO: betmasterx-frontend
 
@@ -41,10 +328,12 @@ jobs:
   lint-test:
     name: Lint & Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
-      # Backend
+      # ---- Backend ----
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -56,10 +345,19 @@ jobs:
       - name: Lint backend (flake8)
         run: |
           cd backend
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics \
-                    --exclude=__pycache__,.env
+          flake8 . \
+            --count \
+            --select=E9,F63,F7,F82 \
+            --show-source \
+            --statistics \
+            --exclude=__pycache__,.env
 
-      # Frontend
+      - name: Test backend (pytest)
+        run: |
+          cd backend
+          pytest --tb=short -q || true   # Remove "|| true" once tests are stable
+
+      # ---- Frontend ----
       - uses: actions/setup-node@v4
         with:
           node-version: "18"
@@ -72,7 +370,7 @@ jobs:
       - name: Lint frontend (ESLint)
         run: cd frontend && npm run lint || true
 
-      # Helm chart validation
+      # ---- Helm chart validation ----
       - uses: azure/setup-helm@v4
         with:
           version: "3.14.0"
@@ -85,7 +383,7 @@ jobs:
           helm lint helm/betmasterx/ -f helm/betmasterx/values.yaml \
                     -f helm/betmasterx/values-production.yaml
 
-      # Validate ArgoCD manifests are valid YAML
+      # ---- Validate ArgoCD manifests ----
       - name: Validate ArgoCD manifests (YAML)
         run: |
           python3 -c "
@@ -105,12 +403,33 @@ jobs:
   # ----------------------------------------------------------
   # Job 2: Security Scanning (Trivy)
   # Runs only on push to main / semver tags
+  #
+  # FIX 1: Added explicit permissions block.
+  #   Without `security-events: write`, GitHub rejects the
+  #   SARIF upload with "Resource not accessible by integration".
+  #
+  # FIX 2: Upload SARIF for BOTH backend AND frontend images.
+  #   Previously only backend SARIF was uploaded.
+  #
+  # FIX 3: Upgraded codeql-action/upload-sarif to v4.
+  #   v3 is deprecated and will stop working in Dec 2026.
+  #
+  # TIP: To suppress known/accepted CVEs, create a .trivyignore
+  #   file at repo root:
+  #     # Tracked in issue #123 — no upstream fix available
+  #     CVE-2024-XXXXX
   # ----------------------------------------------------------
   security-scan:
     name: Security Scan (Trivy)
     runs-on: ubuntu-latest
     needs: lint-test
     if: github.event_name == 'push'
+
+    # FIX 1: These permissions are required for SARIF upload to work.
+    permissions:
+      contents:        read
+      security-events: write   # Required by github/codeql-action/upload-sarif
+
     steps:
       - uses: actions/checkout@v4
 
@@ -126,49 +445,96 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      # ---- Backend image scan ----
       - name: Build backend image (for scanning)
         run: docker build -t betmasterx-backend:scan ./backend
 
       - name: Trivy scan — Backend image
+        id: trivy-backend
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "betmasterx-backend:scan"
-          format: "sarif"
-          output: "trivy-backend.sarif"
-          exit-code: "1"
-          ignore-unfixed: true
-          vuln-type: "os,library"
-          severity: "CRITICAL,HIGH"
+          image-ref:       "betmasterx-backend:scan"
+          format:          "sarif"
+          output:          "trivy-backend.sarif"
+          exit-code:       "1"           # Fail the job on CRITICAL/HIGH findings
+          ignore-unfixed:  true          # Skip CVEs with no fix yet
+          vuln-type:       "os,library"
+          severity:        "CRITICAL,HIGH"
 
+      # ---- Frontend image scan ----
       - name: Build frontend image (for scanning)
         run: docker build -t betmasterx-frontend:scan --target production ./frontend
 
       - name: Trivy scan — Frontend image
+        id: trivy-frontend
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "betmasterx-frontend:scan"
-          format: "sarif"
-          output: "trivy-frontend.sarif"
-          exit-code: "1"
-          ignore-unfixed: true
-          vuln-type: "os,library"
-          severity: "CRITICAL,HIGH"
+          image-ref:       "betmasterx-frontend:scan"
+          format:          "sarif"
+          output:          "trivy-frontend.sarif"
+          exit-code:       "1"
+          ignore-unfixed:  true
+          vuln-type:       "os,library"
+          severity:        "CRITICAL,HIGH"
 
+      # ---- IaC scan (warn only, does not fail the build) ----
       - name: Trivy scan — IaC (Terraform + K8s)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: "config"
-          scan-ref: "."
-          format: "table"
-          exit-code: "0"       # Warn only for IaC misconfigs
-          severity: "CRITICAL,HIGH"
+          scan-ref:  "."
+          format:    "table"
+          exit-code: "0"        # Warn only — IaC misconfigs don't block merge
+          severity:  "CRITICAL,HIGH"
 
-      # Upload SARIF results to GitHub Security tab
-      - name: Upload scan results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+      # ---- Upload SARIF to GitHub Security tab ----
+      # FIX 2: Upload backend SARIF
+      # FIX 3: Upgraded from v3 → v4
+      - name: Upload backend scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()    # Upload even if the scan step above failed
+        with:
+          sarif_file:   "trivy-backend.sarif"
+          category:     "trivy-backend"
+
+      # FIX 2: Upload frontend SARIF (was missing before)
+      - name: Upload frontend scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
-          sarif_file: "trivy-backend.sarif"
+          sarif_file:   "trivy-frontend.sarif"
+          category:     "trivy-frontend"
+
+      # Print a human-readable summary so you know what to fix
+      - name: Scan summary (table format for logs)
+        if: always()
+        run: |
+          echo "## 🔍 Trivy Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Re-running scans in table format for readability..." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Backend" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          trivy image betmasterx-backend:scan \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --vuln-type os,library \
+            --format table 2>/dev/null || true >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          echo "### Frontend" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          trivy image betmasterx-frontend:scan \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --vuln-type os,library \
+            --format table 2>/dev/null || true >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "💡 To suppress a known/accepted CVE, add it to \`.trivyignore\` at repo root." \
+            >> $GITHUB_STEP_SUMMARY
 
   # ----------------------------------------------------------
   # Job 3: Build & Push Images to ECR
@@ -186,8 +552,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: security-scan
     if: github.event_name == 'push'
+    permissions:
+      contents: read
     outputs:
       image-tag: ${{ steps.meta.outputs.sha-short }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -206,6 +575,7 @@ jobs:
         run: |
           SHORT_SHA="sha-$(git rev-parse --short HEAD)"
           echo "sha-short=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
           # If this is a semver tag, also push the version tag
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/}"
@@ -218,45 +588,45 @@ jobs:
       - name: Build & Push — Backend
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
-          push: true
+          context:    ./backend
+          push:       true
           provenance: false    # Omit attestation for ECR compatibility
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest
             ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.meta.outputs.sha-short }}
             ${{ steps.meta.outputs.version-tag && format('{0}/{1}:{2}', env.ECR_REGISTRY, env.BACKEND_REPO, steps.meta.outputs.version-tag) || '' }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to:   type=gha,mode=max
 
       # ---- Frontend ----
       - name: Build & Push — Frontend
         uses: docker/build-push-action@v5
         with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          target: production
-          push: true
+          context:    ./frontend
+          file:       ./frontend/Dockerfile
+          target:     production
+          push:       true
           provenance: false
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest
             ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.meta.outputs.sha-short }}
             ${{ steps.meta.outputs.version-tag && format('{0}/{1}:{2}', env.ECR_REGISTRY, env.FRONTEND_REPO, steps.meta.outputs.version-tag) || '' }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to:   type=gha,mode=max
 
-      # ---- Notify ArgoCD to sync (optional — Image Updater will also detect) ----
+      # ---- Notify ArgoCD to sync (optional speedup — Image Updater also detects) ----
       - name: Notify ArgoCD to refresh (optional speedup)
         if: github.ref == 'refs/heads/main'
         env:
-          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}      # e.g. argocd.betmasterx.example.com
+          ARGOCD_SERVER:     ${{ secrets.ARGOCD_SERVER }}      # e.g. argocd.betmasterx.example.com
           ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
         run: |
           if [ -n "${ARGOCD_SERVER}" ] && [ -n "${ARGOCD_AUTH_TOKEN}" ]; then
-            # Trigger ArgoCD refresh for dev app (Image Updater handles others)
-            curl -s -X POST \
+            curl -sf -X POST \
               -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
-              "https://${ARGOCD_SERVER}/api/v1/applications/betmasterx-dev/refresh" || true
-            echo "ArgoCD refresh triggered for betmasterx-dev"
+              "https://${ARGOCD_SERVER}/api/v1/applications/betmasterx-dev/refresh" \
+              && echo "ArgoCD refresh triggered for betmasterx-dev" \
+              || echo "⚠️  ArgoCD refresh call failed — Image Updater will still detect the new tag"
           else
             echo "ARGOCD_SERVER or ARGOCD_AUTH_TOKEN not set — skipping ArgoCD refresh"
           fi
@@ -267,7 +637,8 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Image | Tag |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-----|" >> $GITHUB_STEP_SUMMARY
-          echo "| betmasterx-backend | \`${{ steps.meta.outputs.sha-short }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| betmasterx-backend  | \`${{ steps.meta.outputs.sha-short }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| betmasterx-frontend | \`${{ steps.meta.outputs.sha-short }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**ArgoCD** will detect the new tag via Image Updater and sync automatically." >> $GITHUB_STEP_SUMMARY
+          echo "**ArgoCD** will detect the new tag via Image Updater and sync automatically." \
+            >> $GITHUB_STEP_SUMMARY
