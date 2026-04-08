@@ -299,6 +299,12 @@ name: CI — BetMasterX (GitOps / ArgoCD)
 #   4. Added .trivyignore support note
 #   5. Trivy scan failure now creates a summary before hard-failing
 #      so you know which CVEs to address
+#   6. Each scan step runs independently with `continue-on-error: true`
+#      so backend failure no longer skips frontend scan
+#   7. SARIF uploads guarded with hashFiles() — only upload if the
+#      file actually exists (prevents "Path does not exist" error)
+#   8. Job fails at the end via an explicit check step so all scans
+#      always run to completion before the job exits non-zero
 # ============================================================
 
 on:
@@ -408,11 +414,15 @@ jobs:
   #   Without `security-events: write`, GitHub rejects the
   #   SARIF upload with "Resource not accessible by integration".
   #
-  # FIX 2: Upload SARIF for BOTH backend AND frontend images.
-  #   Previously only backend SARIF was uploaded.
+  # FIX 2: Each scan step uses `continue-on-error: true` so a
+  #   failing backend scan no longer skips the frontend scan.
+  #   The job fails explicitly at the end via a check step.
   #
-  # FIX 3: Upgraded codeql-action/upload-sarif to v4.
-  #   v3 is deprecated and will stop working in Dec 2026.
+  # FIX 3: SARIF uploads are guarded with hashFiles() so the
+  #   upload step is skipped when the file doesn't exist
+  #   (previously caused "Path does not exist: trivy-frontend.sarif").
+  #
+  # FIX 4: Upgraded codeql-action/upload-sarif from v3 → v4.
   #
   # TIP: To suppress known/accepted CVEs, create a .trivyignore
   #   file at repo root:
@@ -425,7 +435,6 @@ jobs:
     needs: lint-test
     if: github.event_name == 'push'
 
-    # FIX 1: These permissions are required for SARIF upload to work.
     permissions:
       contents:        read
       security-events: write   # Required by github/codeql-action/upload-sarif
@@ -449,15 +458,18 @@ jobs:
       - name: Build backend image (for scanning)
         run: docker build -t betmasterx-backend:scan ./backend
 
+      # FIX 2: continue-on-error: true — backend failure no longer
+      # skips the frontend scan. We check outcomes at the end.
       - name: Trivy scan — Backend image
         id: trivy-backend
+        continue-on-error: true
         uses: aquasecurity/trivy-action@master
         with:
           image-ref:       "betmasterx-backend:scan"
           format:          "sarif"
           output:          "trivy-backend.sarif"
-          exit-code:       "1"           # Fail the job on CRITICAL/HIGH findings
-          ignore-unfixed:  true          # Skip CVEs with no fix yet
+          exit-code:       "1"          # Trivy exits 1 on findings
+          ignore-unfixed:  true         # Skip CVEs with no fix yet
           vuln-type:       "os,library"
           severity:        "CRITICAL,HIGH"
 
@@ -465,8 +477,10 @@ jobs:
       - name: Build frontend image (for scanning)
         run: docker build -t betmasterx-frontend:scan --target production ./frontend
 
+      # FIX 2: Same continue-on-error treatment for frontend.
       - name: Trivy scan — Frontend image
         id: trivy-frontend
+        continue-on-error: true
         uses: aquasecurity/trivy-action@master
         with:
           image-ref:       "betmasterx-frontend:scan"
@@ -488,30 +502,29 @@ jobs:
           severity:  "CRITICAL,HIGH"
 
       # ---- Upload SARIF to GitHub Security tab ----
-      # FIX 2: Upload backend SARIF
-      # FIX 3: Upgraded from v3 → v4
+      # FIX 3: hashFiles() guard — only upload if the file was actually created.
+      #   If the build step before the scan failed, the .sarif file won't exist
+      #   and the upload would error with "Path does not exist".
+      # FIX 4: Upgraded from codeql-action/upload-sarif v3 → v4.
       - name: Upload backend scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: always()    # Upload even if the scan step above failed
+        if: always() && hashFiles('trivy-backend.sarif') != ''
         with:
-          sarif_file:   "trivy-backend.sarif"
-          category:     "trivy-backend"
+          sarif_file: "trivy-backend.sarif"
+          category:   "trivy-backend"
 
-      # FIX 2: Upload frontend SARIF (was missing before)
       - name: Upload frontend scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() && hashFiles('trivy-frontend.sarif') != ''
         with:
-          sarif_file:   "trivy-frontend.sarif"
-          category:     "trivy-frontend"
+          sarif_file: "trivy-frontend.sarif"
+          category:   "trivy-frontend"
 
-      # Print a human-readable summary so you know what to fix
+      # Print a human-readable summary of findings
       - name: Scan summary (table format for logs)
         if: always()
         run: |
           echo "## 🔍 Trivy Scan Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Re-running scans in table format for readability..." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           echo "### Backend" >> $GITHUB_STEP_SUMMARY
@@ -520,7 +533,8 @@ jobs:
             --severity CRITICAL,HIGH \
             --ignore-unfixed \
             --vuln-type os,library \
-            --format table 2>/dev/null || true >> $GITHUB_STEP_SUMMARY
+            --format table 2>/dev/null \
+            >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
 
           echo "### Frontend" >> $GITHUB_STEP_SUMMARY
@@ -529,12 +543,39 @@ jobs:
             --severity CRITICAL,HIGH \
             --ignore-unfixed \
             --vuln-type os,library \
-            --format table 2>/dev/null || true >> $GITHUB_STEP_SUMMARY
+            --format table 2>/dev/null \
+            >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "💡 To suppress a known/accepted CVE, add it to \`.trivyignore\` at repo root." \
             >> $GITHUB_STEP_SUMMARY
+
+      # FIX 2: Explicit failure gate — fail the job now if either
+      # scan found vulnerabilities. Both scans always run first.
+      - name: Fail job if any image scan found vulnerabilities
+        if: always()
+        run: |
+          BACKEND_OUTCOME="${{ steps.trivy-backend.outcome }}"
+          FRONTEND_OUTCOME="${{ steps.trivy-frontend.outcome }}"
+          FAILED=false
+
+          if [ "${BACKEND_OUTCOME}" = "failure" ]; then
+            echo "❌ Backend image scan found CRITICAL/HIGH vulnerabilities."
+            FAILED=true
+          fi
+          if [ "${FRONTEND_OUTCOME}" = "failure" ]; then
+            echo "❌ Frontend image scan found CRITICAL/HIGH vulnerabilities."
+            FAILED=true
+          fi
+
+          if [ "${FAILED}" = "true" ]; then
+            echo ""
+            echo "Fix the CVEs above or add them to .trivyignore if no upstream fix exists."
+            exit 1
+          fi
+
+          echo "✅ All image scans passed."
 
   # ----------------------------------------------------------
   # Job 3: Build & Push Images to ECR
