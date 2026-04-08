@@ -27,7 +27,7 @@ spec:
   project: betmasterx
 
   source:
-    repoURL: https://github.com/your-org/winner-kube.git
+    repoURL: https://github.com/gauravbalpande/winner-kube-final.git
     targetRevision: HEAD
     path: helm/betmasterx
     helm:
