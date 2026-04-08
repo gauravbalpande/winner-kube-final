@@ -1,0 +1,27 @@
+apiVersion: v2
+name: betmasterx
+description: >
+  BetMasterX — Production-grade horse betting platform deployed on AWS EKS.
+  Includes FastAPI backend, React/Nginx frontend, OpenTelemetry observability,
+  HPA autoscaling, ALB Ingress, and IRSA-based security.
+
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - betting
+  - fastapi
+  - react
+  - kubernetes
+  - aws
+  - eks
+
+maintainers:
+  - name: BetMasterX Team
+    url: https://github.com/your-org/winner-kube
+
+home: https://github.com/your-org/winner-kube
+
+sources:
+  - https://github.com/your-org/winner-kube

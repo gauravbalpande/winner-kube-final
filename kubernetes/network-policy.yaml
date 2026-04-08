@@ -1,0 +1,110 @@
+---
+# ============================================================
+# NetworkPolicy — Defence in depth for betmasterx namespace
+# ============================================================
+
+# Default deny all ingress + egress (whitelist approach)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: betmasterx
+spec:
+  podSelector: {}           # applies to ALL pods in namespace
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# Allow frontend pods to receive traffic from ALB
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-ingress
+  namespace: betmasterx
+spec:
+  podSelector:
+    matchLabels:
+      app: betmasterx-frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - {}   # Allow from any source (ALB routes are external)
+
+---
+# Allow frontend pods to call backend pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-backend
+  namespace: betmasterx
+spec:
+  podSelector:
+    matchLabels:
+      app: betmasterx-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: betmasterx-frontend
+      ports:
+        - protocol: TCP
+          port: 8000
+
+---
+# Allow backend egress: Supabase (HTTPS/443) + OTel Collector (gRPC/4317)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-egress
+  namespace: betmasterx
+spec:
+  podSelector:
+    matchLabels:
+      app: betmasterx-backend
+  policyTypes:
+    - Egress
+  egress:
+    # Supabase PostgreSQL (external SaaS via HTTPS)
+    - ports:
+        - protocol: TCP
+          port: 443
+    # OTel collector / Jaeger in monitoring namespace
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 4317
+    # DNS resolution (required for all egress)
+    - ports:
+        - protocol: UDP
+          port: 53
+
+---
+# Allow frontend egress: only to backend (API calls) + DNS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-egress
+  namespace: betmasterx
+spec:
+  podSelector:
+    matchLabels:
+      app: betmasterx-frontend
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: betmasterx-backend
+      ports:
+        - protocol: TCP
+          port: 8000
+    - ports:
+        - protocol: UDP
+          port: 53

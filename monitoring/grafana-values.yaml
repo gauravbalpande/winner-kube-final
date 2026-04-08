@@ -1,0 +1,89 @@
+# ============================================================
+# Grafana Helm Values
+# Source: grafana/grafana
+# Namespace: monitoring
+# ============================================================
+
+replicas: 1
+
+# Admin credentials — override with --set in CI/CD
+adminUser: admin
+adminPassword: "change-me-in-production"   # Set via secret in production
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "300m"
+    memory: "256Mi"
+
+persistence:
+  enabled: true
+  size: 5Gi
+
+# ============================================================
+# Pre-configured datasources
+# ============================================================
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus-operated.monitoring.svc.cluster.local:9090
+        access: proxy
+        isDefault: true
+
+      - name: Loki
+        type: loki
+        url: http://loki.monitoring.svc.cluster.local:3100
+        access: proxy
+
+      - name: Jaeger
+        type: jaeger
+        url: http://jaeger-query.monitoring.svc.cluster.local:16686
+        access: proxy
+
+# ============================================================
+# Pre-provisioned dashboards
+# ============================================================
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: "default"
+        orgId: 1
+        folder: "BetMasterX"
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+# Import community dashboards
+dashboards:
+  default:
+    kubernetes-cluster:
+      gnetId: 7249          # Kubernetes Cluster Overview
+      revision: 1
+      datasource: Prometheus
+
+    fastapi-metrics:
+      gnetId: 14514         # FastAPI Observability
+      revision: 1
+      datasource: Prometheus
+
+    node-exporter:
+      gnetId: 1860          # Node Exporter Full
+      revision: 37
+      datasource: Prometheus
+
+# Grafana environment variables
+env:
+  GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 3000

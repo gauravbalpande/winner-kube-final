@@ -1,0 +1,44 @@
+---
+# ============================================================
+# ArgoCD App-of-Apps — Root Application
+# This single Application bootstrap deploys all other ArgoCD apps
+# from the argocd/apps/ directory in this same repository.
+#
+# Pattern: App-of-Apps
+#   root-app → argocd/apps/ → (betmasterx-dev, betmasterx-staging, 
+#                               betmasterx-production, monitoring)
+#
+# Apply once manually:
+#   kubectl apply -f argocd/install/root-app.yaml -n argocd
+# ============================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app
+  namespace: argocd
+  # Finalizer ensures ArgoCD cleans up all child apps when this is deleted
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/name: root-app
+    app.kubernetes.io/part-of: betmasterx-gitops
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/your-org/winner-kube.git   # ← Update with your repo
+    targetRevision: HEAD
+    path: argocd/apps     # Watches this directory for child Application manifests
+
+  destination:
+    server: https://kubernetes.default.svc    # In-cluster deployment
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true        # Delete resources removed from git
+      selfHeal: true     # Re-apply if someone manually changes k8s state
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

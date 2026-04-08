@@ -1,0 +1,77 @@
+---
+# ============================================================
+# ArgoCD AppProject — BetMasterX
+# Scopes what repositories, clusters, and namespaces ArgoCD
+# can deploy to. Principle of least privilege for GitOps.
+# ============================================================
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: betmasterx
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: "BetMasterX horse-betting platform — all environments"
+
+  # Source repositories allowed in this project
+  sourceRepos:
+    - "https://github.com/your-org/winner-kube.git"
+    - "https://prometheus-community.github.io/helm-charts"
+    - "https://grafana.github.io/helm-charts"
+    - "https://argoproj.github.io/argo-helm"
+
+  # Target clusters and namespaces allowed
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: betmasterx
+    - server: https://kubernetes.default.svc
+      namespace: betmasterx-dev
+    - server: https://kubernetes.default.svc
+      namespace: betmasterx-staging
+    - server: https://kubernetes.default.svc
+      namespace: monitoring
+    - server: https://kubernetes.default.svc
+      namespace: argocd
+
+  # Cluster-scoped resources allowed (CRDs, ClusterRoles, etc.)
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+
+  # Namespace-scoped resources allowed
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  # RBAC roles within this project
+  roles:
+    - name: developer
+      description: "Can sync dev environment only"
+      policies:
+        - p, proj:betmasterx:developer, applications, sync, betmasterx/betmasterx-dev, allow
+        - p, proj:betmasterx:developer, applications, get, betmasterx/*, allow
+      groups:
+        - betmasterx-developers
+
+    - name: ops
+      description: "Full access to all environments"
+      policies:
+        - p, proj:betmasterx:ops, applications, *, betmasterx/*, allow
+      groups:
+        - betmasterx-ops
+
+  # Sync windows — prevent accidental production changes during business hours
+  syncWindows:
+    - kind: deny
+      schedule: "0 9 * * 1-5"    # Deny sync Mon-Fri 9am UTC
+      duration: 8h
+      applications:
+        - betmasterx-production
+      manualSync: false           # Even manual sync is blocked (set True to allow hotfixes)

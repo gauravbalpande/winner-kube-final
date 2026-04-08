@@ -1,0 +1,149 @@
+# ============================================================
+# ArgoCD Helm Values — Production-Grade Installation
+# Source: argo/argo-cd
+# Namespace: argocd
+# ============================================================
+
+# Global settings
+global:
+  image:
+    tag: "v2.10.0"
+
+# ============================================================
+# ArgoCD Server
+# ============================================================
+server:
+  replicas: 1
+
+  # Disable TLS at the ArgoCD server level — let ALB handle TLS
+  extraArgs:
+    - --insecure
+
+  service:
+    type: ClusterIP
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  # Ingress via ALB (adjust host + cert ARN for your domain)
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    annotations:
+      kubernetes.io/ingress.class: alb
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80,"HTTPS":443}]'
+      alb.ingress.kubernetes.io/ssl-redirect: "443"
+      alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID"
+      alb.ingress.kubernetes.io/healthcheck-path: /healthz
+    hosts:
+      - argocd.betmasterx.example.com
+    paths:
+      - /
+
+# ============================================================
+# Application Controller (watches k8s + git)
+# ============================================================
+controller:
+  replicas: 1
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+# ============================================================
+# Repo Server (clones git repos, renders Helm/Kustomize)
+# ============================================================
+repoServer:
+  replicas: 1
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "300m"
+      memory: "512Mi"
+
+# ============================================================
+# Application Set Controller (multi-env ApplicationSets)
+# ============================================================
+applicationSet:
+  replicas: 1
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+# ============================================================
+# Redis (session + cache store)
+# ============================================================
+redis:
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+# ============================================================
+# Dex (SSO — disabled for simplicity, enable for production SSO)
+# ============================================================
+dex:
+  enabled: false
+
+# ============================================================
+# ArgoCD Config — RBAC + repositories
+# ============================================================
+configs:
+  # RBAC — admin role for local admin user
+  rbac:
+    policy.default: role:readonly
+    policy.csv: |
+      p, role:admin, applications, *, */*, allow
+      p, role:admin, clusters, *, *, allow
+      p, role:admin, repositories, *, *, allow
+      g, admin, role:admin
+
+  # Secret — admin password (bcrypt hash, change in production!)
+  # Generate: htpasswd -nbBC 10 "" your-password | tr -d ':\n' | sed 's/$2y/$2a/'
+  secret:
+    argocdServerAdminPassword: "$2a$10$PLACEHOLDER_CHANGE_ME_IN_PRODUCTION_HASH"
+
+  # ArgoCD CM — extra settings
+  cm:
+    # Allow ArgoCD to manage the betmasterx namespace
+    application.resourceTrackingMethod: annotation
+    # Sync timeout
+    timeout.reconciliation: 180s
+    # Resource customizations for health checks
+    resource.customizations.health.networking.k8s.io_Ingress: |
+      hs = {}
+      hs.status = "Healthy"
+      hs.message = ""
+      return hs
+
+# ============================================================
+# Notifications (Slack/email alerts on sync events)
+# ============================================================
+notifications:
+  enabled: true
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "100m"
+      memory: "128Mi"

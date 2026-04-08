@@ -1,1 +1,1 @@
-tyou can change the building of docker image by giving explicitly the command during docker built --target development -t _name .
+you can change the building of docker image by giving explicitly the command during docker built --target development -t _name .

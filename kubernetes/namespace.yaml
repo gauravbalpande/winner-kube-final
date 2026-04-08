@@ -1,0 +1,13 @@
+---
+# ============================================================
+# Namespace — betmasterx
+# All application resources live in this namespace
+# ============================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: betmasterx
+  labels:
+    app.kubernetes.io/name: betmasterx
+    app.kubernetes.io/managed-by: helm
+    environment: production

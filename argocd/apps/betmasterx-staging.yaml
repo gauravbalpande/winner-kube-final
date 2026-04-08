@@ -1,0 +1,66 @@
+---
+# ============================================================
+# ArgoCD Application — BetMasterX STAGING
+# ============================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: betmasterx-staging
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/part-of: betmasterx-gitops
+    environment: staging
+  annotations:
+    # Image Updater: track images with 'staging' tag prefix
+    argocd-image-updater.argoproj.io/image-list: |
+      backend=040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-backend,
+      frontend=040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-frontend
+    argocd-image-updater.argoproj.io/backend.update-strategy: name
+    argocd-image-updater.argoproj.io/backend.allow-tags: regexp:^staging-
+    argocd-image-updater.argoproj.io/frontend.update-strategy: name
+    argocd-image-updater.argoproj.io/frontend.allow-tags: regexp:^staging-
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/git-branch: main
+spec:
+  project: betmasterx
+
+  source:
+    repoURL: https://github.com/your-org/winner-kube.git
+    targetRevision: HEAD
+    path: helm/betmasterx
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-staging.yaml
+      parameters:
+        - name: backend.image.repository
+          value: "040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-backend"
+        - name: frontend.image.repository
+          value: "040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-frontend"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: betmasterx-staging
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/template/spec/containers/0/image
+        - /spec/template/spec/containers/1/image

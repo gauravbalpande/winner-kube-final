@@ -1,0 +1,51 @@
+# ============================================================
+# Loki Helm Values — Single Binary (free-tier friendly)
+# Source: grafana/loki
+# Namespace: monitoring
+# ============================================================
+
+# Single binary mode — no microservices, minimal resource footprint
+deploymentMode: SingleBinary
+
+loki:
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem    # No S3 required for dev/demo. Change to s3 for production.
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+singleBinary:
+  replicas: 1
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "300m"
+      memory: "512Mi"
+  persistence:
+    enabled: true
+    size: 10Gi
+
+# Promtail sidecar — collects logs from all pods
+promtail:
+  enabled: true
+  config:
+    clients:
+      - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+
+# Grafana — disabled (deployed separately via grafana-values.yaml)
+grafana:
+  enabled: false
+
+# MinIO — disabled (using filesystem storage)
+minio:
+  enabled: false

@@ -22,6 +22,9 @@ resource "aws_subnet" "public" {
 
   tags = merge(var.tags, {
     Name = "${var.environment_name}-public-${each.key}"
+    # Required by AWS Load Balancer Controller for external ALB discovery
+    "kubernetes.io/role/elb"                           = "1"
+    "kubernetes.io/cluster/${var.environment_name}-eksdemo" = "shared"
   })
 }
 
@@ -32,6 +35,9 @@ resource "aws_subnet" "private" {
   availability_zone = each.key
   tags = merge(var.tags, {
     Name = "${var.environment_name}-private-${each.key}"
+    # Required by AWS Load Balancer Controller for internal ALB discovery
+    "kubernetes.io/role/internal-elb"                       = "1"
+    "kubernetes.io/cluster/${var.environment_name}-eksdemo" = "shared"
   })
 }
 

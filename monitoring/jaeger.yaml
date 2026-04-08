@@ -1,0 +1,117 @@
+---
+# ============================================================
+# Jaeger — All-in-One (Development/Demo mode)
+# For production, use Jaeger Operator or distributed deployment
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: monitoring
+  labels:
+    app: jaeger
+    app.kubernetes.io/component: tracing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "14269"
+    spec:
+      containers:
+        - name: jaeger
+          image: jaegertracing/all-in-one:1.54
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"   # Accept OTLP gRPC from OTel SDK
+            - name: SPAN_STORAGE_TYPE
+              value: memory   # In-memory storage (demo). Use Elasticsearch/Cassandra in prod.
+          ports:
+            # OTLP gRPC — receives traces from backend
+            - containerPort: 4317
+              name: otlp-grpc
+              protocol: TCP
+            # OTLP HTTP
+            - containerPort: 4318
+              name: otlp-http
+              protocol: TCP
+            # Jaeger UI
+            - containerPort: 16686
+              name: query-ui
+              protocol: TCP
+            # Jaeger thrift compact
+            - containerPort: 6831
+              name: jaeger-compact
+              protocol: UDP
+            # Admin/health
+            - containerPort: 14269
+              name: admin
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 14269
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 14269
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+---
+# Jaeger services — collector + query UI
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-collector
+  namespace: monitoring
+  labels:
+    app: jaeger
+spec:
+  selector:
+    app: jaeger
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
+    - name: jaeger-compact
+      port: 6831
+      targetPort: 6831
+      protocol: UDP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-query
+  namespace: monitoring
+  labels:
+    app: jaeger
+spec:
+  selector:
+    app: jaeger
+  ports:
+    - name: query-ui
+      port: 16686
+      targetPort: 16686
+      protocol: TCP

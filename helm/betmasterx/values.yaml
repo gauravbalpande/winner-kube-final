@@ -1,0 +1,133 @@
+# ============================================================
+# values.yaml — Base / Development defaults
+# Override per environment with -f values-{env}.yaml
+# ============================================================
+
+global:
+  environment: dev
+  awsAccountId: "040342463442"          # Replace: 123456789012
+  awsRegion: us-east-1
+  ecrRegistry: "040342463442.dkr.ecr.us-east-1.amazonaws.com"
+
+# ============================================================
+# Backend (FastAPI)
+# ============================================================
+backend:
+  enabled: true
+  image:
+    repository: "040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-backend"
+    tag: "latest"
+    pullPolicy: Always
+
+  replicaCount: 2
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  probes:
+    liveness:
+      path: /health
+      initialDelaySeconds: 30
+      periodSeconds: 10
+    readiness:
+      path: /health
+      initialDelaySeconds: 10
+      periodSeconds: 5
+    startup:
+      path: /health
+      failureThreshold: 12
+      periodSeconds: 5
+
+  # OTel configuration
+  otel:
+    endpoint: "http://jaeger-collector.monitoring.svc.cluster.local:4317"
+    serviceName: "betmasterx-backend"
+
+  # IRSA
+  serviceAccount:
+    create: true
+    name: betmasterx-backend-sa
+    roleArn: "arn:aws:iam::040342463442:role/betmasterx-backend-irsa"
+
+# ============================================================
+# Frontend (React/Nginx)
+# ============================================================
+frontend:
+  enabled: true
+  image:
+    repository: "040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-frontend"
+    tag: "latest"
+    pullPolicy: Always
+
+  replicaCount: 2
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+# ============================================================
+# Ingress (AWS ALB)
+# ============================================================
+ingress:
+  enabled: true
+  className: alb
+  host: betmasterx.example.com        # Replace with your domain
+  certificateArn: "arn:aws:acm:us-east-1:040342463442:certificate/CERT_ID"
+  scheme: internet-facing
+  targetType: ip
+
+# ============================================================
+# Application Config (ConfigMap)
+# ============================================================
+config:
+  appName: BetMasterX
+  debug: "false"
+  algorithm: HS256
+  accessTokenExpireMinutes: "1440"
+  mcpServerUrl: "http://localhost:8080"
+  allowedOrigins: '["https://betmasterx.example.com"]'
+
+# ============================================================
+# Secrets (values NOT stored here — injected by CI/CD)
+# ============================================================
+secrets:
+  supabaseUrl: ""            # Set via --set or CI/CD
+  supabaseKey: ""
+  supabaseServiceKey: ""
+  secretKey: ""
+
+# ============================================================
+# Network Policies
+# ============================================================
+networkPolicy:
+  enabled: true

@@ -1,0 +1,49 @@
+# ============================================================
+# ArgoCD Image Updater — Helm Values
+# Automatically detects new ECR image tags and updates
+# values files in the git repo (write-back via git)
+# Source: argo/argocd-image-updater
+# ============================================================
+
+# Image Updater config
+config:
+  # Logging
+  logLevel: info
+
+  # Update interval — how often to check ECR for new tags
+  interval: "2m"
+
+  # Registry configuration for AWS ECR
+  registries:
+    - name: AWS ECR us-east-1
+      api_url: https://040342463442.dkr.ecr.us-east-1.amazonaws.com
+      prefix: 040342463442.dkr.ecr.us-east-1.amazonaws.com
+      ping: yes
+      insecure: no
+      credentials: ext:/scripts/ecr-login.sh   # Uses ECR auth helper
+
+# IRSA for ECR access (annotate the SA with ECR read IAM role)
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::040342463442:role/betmasterx-backend-irsa"
+
+# Git write-back: Image Updater commits new tags to values files
+# Configure git credentials via k8s secret
+authScripts:
+  enabled: true
+  scripts:
+    ecr-login.sh: |
+      #!/bin/sh
+      aws ecr get-authorization-token \
+        --region us-east-1 \
+        --query 'authorizationData[0].authorizationToken' \
+        --output text | base64 -d | cut -d: -f2
+
+resources:
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+  limits:
+    cpu: "100m"
+    memory: "128Mi"

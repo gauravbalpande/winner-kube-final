@@ -1,0 +1,34 @@
+# ============================================================
+# values-staging.yaml — Staging environment overrides
+# Usage: helm upgrade --install betmasterx ./helm/betmasterx \
+#          -f values.yaml -f values-staging.yaml
+# ============================================================
+
+global:
+  environment: staging
+
+backend:
+  replicaCount: 2
+  image:
+    tag: "staging"    # CI tags staging images differently
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "384Mi"
+    limits:
+      cpu: "750m"
+      memory: "768Mi"
+  autoscaling:
+    maxReplicas: 6
+
+frontend:
+  replicaCount: 2
+  image:
+    tag: "staging"
+
+ingress:
+  host: staging.betmasterx.example.com
+
+config:
+  debug: "false"
+  allowedOrigins: '["https://staging.betmasterx.example.com"]'

@@ -1,0 +1,48 @@
+---
+# ============================================================
+# Services
+# ============================================================
+
+# ----- Backend ClusterIP Service -----
+apiVersion: v1
+kind: Service
+metadata:
+  name: betmasterx-backend-svc
+  namespace: betmasterx
+  labels:
+    app.kubernetes.io/name: betmasterx
+    app.kubernetes.io/component: backend
+  annotations:
+    # Prometheus scrape annotations (overriden by PodMonitor if using operator)
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app: betmasterx-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+
+---
+# ----- Frontend ClusterIP Service -----
+apiVersion: v1
+kind: Service
+metadata:
+  name: betmasterx-frontend-svc
+  namespace: betmasterx
+  labels:
+    app.kubernetes.io/name: betmasterx
+    app.kubernetes.io/component: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: betmasterx-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP

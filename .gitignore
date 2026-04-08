@@ -80,3 +80,5 @@ terraform/*.tfstate
 k8s/secrets.yaml
 k8s/*.secret.yaml
 k8s/*-secret.yaml
+
+DEPLOYMENT_GUIDE.md

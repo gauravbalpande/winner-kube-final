@@ -1,0 +1,44 @@
+# ============================================================
+# values-production.yaml — Production environment overrides
+# Usage: helm upgrade --install betmasterx ./helm/betmasterx \
+#          -f values.yaml -f values-production.yaml \
+#          --set secrets.supabaseUrl=$SUPABASE_URL \
+#          --set secrets.supabaseKey=$SUPABASE_KEY \
+#          --set secrets.supabaseServiceKey=$SUPABASE_SERVICE_KEY \
+#          --set secrets.secretKey=$JWT_SECRET
+# ============================================================
+
+global:
+  environment: production
+
+backend:
+  replicaCount: 3           # Minimum 3 pods across 3 AZs in prod
+  image:
+    tag: "v1.0.0"           # Pinned semantic version in production
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 10
+
+frontend:
+  replicaCount: 3
+  image:
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 8
+
+ingress:
+  host: betmasterx.com     # Production domain
+
+config:
+  debug: "false"
+  allowedOrigins: '["https://betmasterx.com","https://www.betmasterx.com"]'

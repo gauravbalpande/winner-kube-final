@@ -1,0 +1,18 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: betmasterx-config
+  namespace: betmasterx
+  labels:
+    {{- include "betmasterx.labels" . | nindent 4 }}
+data:
+  APP_NAME: {{ .Values.config.appName | quote }}
+  ENVIRONMENT: {{ .Values.global.environment | quote }}
+  DEBUG: {{ .Values.config.debug | quote }}
+  ALGORITHM: {{ .Values.config.algorithm | quote }}
+  ACCESS_TOKEN_EXPIRE_MINUTES: {{ .Values.config.accessTokenExpireMinutes | quote }}
+  MCP_SERVER_URL: {{ .Values.config.mcpServerUrl | quote }}
+  ALLOWED_ORIGINS: {{ .Values.config.allowedOrigins | quote }}
+  OTEL_SERVICE_NAME: {{ .Values.backend.otel.serviceName | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.backend.otel.endpoint | quote }}

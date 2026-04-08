@@ -1,0 +1,89 @@
+---
+# ============================================================
+# Frontend Deployment — React/Nginx
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: betmasterx-frontend
+  namespace: betmasterx
+  labels:
+    app.kubernetes.io/name: betmasterx
+    app.kubernetes.io/component: frontend
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: betmasterx-frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: betmasterx-frontend
+        app.kubernetes.io/component: frontend
+    spec:
+      # nginx user (UID 101 in official nginx:alpine image)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+
+      containers:
+        - name: frontend
+          image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/betmasterx-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              name: http
+              protocol: TCP
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_BIND_SERVICE", "CHOWN", "SETUID", "SETGID"]
+
+          env:
+            - name: NODE_ENV
+              value: "production"
+
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+      # Spread across AZs
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: betmasterx-frontend
+
+      terminationGracePeriodSeconds: 30

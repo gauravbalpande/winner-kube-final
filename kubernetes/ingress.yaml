@@ -1,0 +1,68 @@
+---
+# ============================================================
+# Ingress — AWS ALB Ingress Controller
+# Routes: /* → frontend, /api/* → backend
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: betmasterx-ingress
+  namespace: betmasterx
+  labels:
+    app.kubernetes.io/name: betmasterx
+    app.kubernetes.io/component: ingress
+  annotations:
+    # Use AWS Load Balancer Controller (not nginx ingress)
+    kubernetes.io/ingress.class: alb
+
+    # ALB scheme — internet-facing for public access
+    alb.ingress.kubernetes.io/scheme: internet-facing
+
+    # Target type — IP routes directly to pods (better performance)
+    alb.ingress.kubernetes.io/target-type: ip
+
+    # HTTPS redirect — force all HTTP to HTTPS
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80,"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+
+    # ACM certificate ARN — replace with your cert ARN
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID
+
+    # Health check for ALB target groups
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+
+    # Security groups — optionally restrict ingress CIDRs
+    # alb.ingress.kubernetes.io/inbound-cidrs: "0.0.0.0/0"
+
+    # Enable WAF (optional)
+    # alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:...
+
+    # Enable access logging to S3
+    # alb.ingress.kubernetes.io/load-balancer-attributes: access_logs.s3.enabled=true,access_logs.s3.bucket=betmasterx-alb-logs
+
+spec:
+  ingressClassName: alb
+  rules:
+    - host: betmasterx.example.com     # Replace with your domain
+      http:
+        paths:
+          # API traffic → backend service
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: betmasterx-backend-svc
+                port:
+                  number: 8000
+          # All other traffic → frontend (SPA)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: betmasterx-frontend-svc
+                port:
+                  number: 80

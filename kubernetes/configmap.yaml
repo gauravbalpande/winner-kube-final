@@ -1,0 +1,24 @@
+---
+# ============================================================
+# ConfigMap — Non-sensitive application configuration
+# Sensitive values (Supabase keys, JWT secret) go in Secret
+# ============================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: betmasterx-config
+  namespace: betmasterx
+  labels:
+    app.kubernetes.io/name: betmasterx
+    app.kubernetes.io/component: config
+data:
+  APP_NAME: "BetMasterX"
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  ALGORITHM: "HS256"
+  ACCESS_TOKEN_EXPIRE_MINUTES: "1440"
+  MCP_SERVER_URL: "http://localhost:8080"
+  ALLOWED_ORIGINS: '["https://betmasterx.example.com"]'
+  # OpenTelemetry — points to Jaeger collector service in monitoring namespace
+  OTEL_SERVICE_NAME: "betmasterx-backend"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger-collector.monitoring.svc.cluster.local:4317"

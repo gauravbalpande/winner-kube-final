@@ -1,0 +1,66 @@
+---
+# ============================================================
+# ArgoCD Application — BetMasterX PRODUCTION
+# Manual sync only — no automated sync for production safety
+# ============================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: betmasterx-production
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/part-of: betmasterx-gitops
+    environment: production
+  annotations:
+    # Image Updater: only track semver-tagged images (v1.x.x)
+    argocd-image-updater.argoproj.io/image-list: |
+      backend=040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-backend,
+      frontend=040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-frontend
+    argocd-image-updater.argoproj.io/backend.update-strategy: semver
+    argocd-image-updater.argoproj.io/backend.allow-tags: regexp:^v[0-9]+\.[0-9]+\.[0-9]+$
+    argocd-image-updater.argoproj.io/frontend.update-strategy: semver
+    argocd-image-updater.argoproj.io/frontend.allow-tags: regexp:^v[0-9]+\.[0-9]+\.[0-9]+$
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/git-branch: main
+    # Notifications — alert on sync status changes
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: deployments
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: deployments
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: alerts
+spec:
+  project: betmasterx
+
+  source:
+    repoURL: https://github.com/your-org/winner-kube.git
+    targetRevision: HEAD
+    path: helm/betmasterx
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-production.yaml
+      parameters:
+        - name: backend.image.repository
+          value: "040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-backend"
+        - name: frontend.image.repository
+          value: "040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-frontend"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: betmasterx
+
+  # ⚠️ Production — MANUAL sync required (no automated)
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    # No automated: block — must manually click Sync in UI or use argocd CLI
+
+  # Self-heal disabled in production — changes must go through git
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/template/spec/containers/0/image
+        - /spec/template/spec/containers/1/image

@@ -1,0 +1,96 @@
+---
+# ============================================================
+# ArgoCD Application — Monitoring Stack
+# Deploys: Prometheus, Grafana, Loki, Jaeger to monitoring ns
+# ============================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/part-of: betmasterx-gitops
+    app.kubernetes.io/component: monitoring
+spec:
+  project: betmasterx
+
+  sources:
+    # Prometheus (kube-prometheus-stack)
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 57.2.0
+      helm:
+        valueFiles:
+          - $values/monitoring/prometheus-values.yaml
+        releaseName: prometheus
+
+    # Loki
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: loki
+      targetRevision: 6.2.0
+      helm:
+        valueFiles:
+          - $values/monitoring/loki-values.yaml
+        releaseName: loki
+
+    # Grafana
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: grafana
+      targetRevision: 7.3.7
+      helm:
+        valueFiles:
+          - $values/monitoring/grafana-values.yaml
+        releaseName: grafana
+
+    # Values files from this git repo
+    - repoURL: https://github.com/your-org/winner-kube.git
+      targetRevision: HEAD
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+
+---
+# ============================================================
+# ArgoCD Application — Jaeger (from raw manifest in this repo)
+# ============================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jaeger
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/part-of: betmasterx-gitops
+spec:
+  project: betmasterx
+
+  source:
+    repoURL: https://github.com/your-org/winner-kube.git
+    targetRevision: HEAD
+    path: monitoring
+    directory:
+      include: "jaeger.yaml"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

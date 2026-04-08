@@ -1,0 +1,70 @@
+---
+# ============================================================
+# ArgoCD Application — BetMasterX DEV
+# Deploys the Helm chart from this repo to the dev environment
+# Namespace: betmasterx (auto-created by ArgoCD)
+# ============================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: betmasterx-dev
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/part-of: betmasterx-gitops
+    environment: dev
+  annotations:
+    # ArgoCD Image Updater watches these images and auto-updates values.yaml
+    argocd-image-updater.argoproj.io/image-list: |
+      backend=040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-backend,
+      frontend=040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-frontend
+    argocd-image-updater.argoproj.io/backend.update-strategy: latest
+    argocd-image-updater.argoproj.io/frontend.update-strategy: latest
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/git-branch: main
+spec:
+  project: betmasterx
+
+  source:
+    repoURL: https://github.com/your-org/winner-kube.git   # ← Update
+    targetRevision: HEAD
+    path: helm/betmasterx
+    helm:
+      valueFiles:
+        - values.yaml
+      # Dev-specific overrides inline
+      parameters:
+        - name: global.environment
+          value: dev
+        - name: backend.image.repository
+          value: "040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-backend"
+        - name: frontend.image.repository
+          value: "040342463442.dkr.ecr.us-east-1.amazonaws.com/betmasterx-frontend"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: betmasterx-dev
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Ignore differences in image tags (managed by Image Updater)
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/template/spec/containers/0/image
+        - /spec/template/spec/containers/1/image
