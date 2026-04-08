@@ -427,6 +427,7 @@ kubectl get hpa -n betmasterx
 
 MIT — see [LICENSE](./LICENSE)
 ok
+ok
 
 ---
 
