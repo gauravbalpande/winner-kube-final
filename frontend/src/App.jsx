@@ -5,8 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { User, Wallet, Trophy, CreditCard, Lock, Mail, Check, X } from 'lucide-react';
 
 // API Base URL - uses environment variable for production, falls back to /api for relative path
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
-
+// const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
 // Authentication Context
 const AuthContext = React.createContext(null);
 

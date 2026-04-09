@@ -15,8 +15,7 @@ export default defineConfig({
           ? 'http://backend:8000' 
           : 'http://localhost:8000',
         changeOrigin: true,
-        // Strip /api prefix when proxying to backend (backend serves without prefix in dev)
-        rewrite: (path) => path.replace(/^\/api/, '')
+        // Backend always serves under /api — no rewrite needed
       }
     }
   },

@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 # FastAPI Application
 # ============================================================
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-API_PREFIX  = "/api" if ENVIRONMENT == "production" else ""
+API_PREFIX  = "/api"
 
 app = FastAPI(
     title="BetMasterX API",
@@ -112,13 +112,8 @@ async def health_check():
     return {"status": "healthy", "environment": ENVIRONMENT}
 
 
-@app.get(f"{API_PREFIX}/health")
-async def health_check_prod():
-    return {"status": "healthy", "environment": ENVIRONMENT}
-
-
 # OPTIONS pre-flight handlers
-@app.options("/auth/register")
-@app.options("/auth/login")
+@app.options(f"{API_PREFIX}/auth/register")
+@app.options(f"{API_PREFIX}/auth/login")
 async def options_handler():
     return {"status": "ok"}

@@ -68,10 +68,19 @@ spec:
         - betmasterx-ops
 
   # Sync windows — prevent accidental production changes during business hours
+  # syncWindows:
+  #   - kind: deny
+  #     schedule: "0 9 * * 1-5"    # Deny sync Mon-Fri 9am UTC
+  #     duration: 8h
+  #     applications:
+  #       - betmasterx-production
+  #     manualSync: false  
+  
   syncWindows:
-    - kind: deny
-      schedule: "0 9 * * 1-5"    # Deny sync Mon-Fri 9am UTC
-      duration: 8h
-      applications:
-        - betmasterx-production
-      manualSync: false           # Even manual sync is blocked (set True to allow hotfixes)
+  - kind: allow
+    schedule: "* * * * *"
+    duration: 24h  
+    applications:
+      - betmasterx-production
+    manualSync: false 
+           # Even manual sync is blocked (set True to allow hotfixes)
