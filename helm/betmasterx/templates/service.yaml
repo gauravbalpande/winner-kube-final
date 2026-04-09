@@ -28,7 +28,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: betmasterx-frontend-svc
-  namespace: betmasterx
+  # namespace: betmasterx
   labels:
     {{- include "betmasterx.labels" . | nindent 4 }}
     app.kubernetes.io/component: frontend
