@@ -22,11 +22,11 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
 
     # HTTPS redirect — force all HTTP to HTTPS
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80,"HTTPS":443}]'
-    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80,"HTTPS":443}]'
+    # alb.ingress.kubernetes.io/ssl-redirect: "443"
 
     # ACM certificate ARN — replace with your cert ARN
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID
 
     # Health check for ALB target groups
     alb.ingress.kubernetes.io/healthcheck-path: /health
