@@ -45,7 +45,7 @@ spec:
         releaseName: grafana
 
     # Values files from this git repo
-    - repoURL: https://github.com/your-org/winner-kube.git
+    - repoURL: https://github.com/gauravbalpande/winner-kube-final.git
       targetRevision: HEAD
       ref: values
 
