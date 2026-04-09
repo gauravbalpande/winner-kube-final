@@ -121,10 +121,10 @@ config:
 # Secrets (values NOT stored here — injected by CI/CD)
 # ============================================================
 secrets:
-  supabaseUrl: ""            # Set via --set or CI/CD
-  supabaseKey: ""
-  supabaseServiceKey: ""
-  secretKey: ""
+  supabaseUrl: "https://pjjxcwyjpkxlnartlybc.supabase.co"            # Set via --set or CI/CD
+  supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqanhjd3lqcGt4bG5hcnRseWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwODE0NDEsImV4cCI6MjA3OTY1NzQ0MX0.lCOaShR5l0tdSBXGCxOD6cc9jsFsBK6gnG8ry9dfL7c"
+  supabaseServiceKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqanhjd3lqcGt4bG5hcnRseWJjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDA4MTQ0MSwiZXhwIjoyMDc5NjU3NDQxfQ.y8mgbhlu--11E7oSDj2nGCbZbOycdc8N8D_qOSN7roM"
+  secretKey: "santabanta@18"
 
 # ============================================================
 # Network Policies
