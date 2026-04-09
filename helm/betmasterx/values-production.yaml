@@ -36,9 +36,6 @@ frontend:
     minReplicas: 3
     maxReplicas: 8
 
-ingress:
-  host: betmasterx.com     # Production domain
-
 config:
   debug: "false"
   allowedOrigins: '["https://betmasterx.com","https://www.betmasterx.com"]'

@@ -1,11 +1,10 @@
 ---
 {{- if .Values.networkPolicy.enabled }}
-# Default deny all
+# Default deny all ingress/egress
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny-all
-  # namespace: betmasterx
   labels:
     {{- include "betmasterx.labels" . | nindent 4 }}
 spec:
@@ -15,11 +14,11 @@ spec:
     - Egress
 
 ---
+# Allow ALB health checks and external traffic to frontend
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-frontend-ingress
-  namespace: betmasterx
 spec:
   podSelector:
     matchLabels:
@@ -30,11 +29,11 @@ spec:
     - {}
 
 ---
+# Allow ALB health checks and external traffic to backend (/api)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-frontend-to-backend
-  namespace: betmasterx
+  name: allow-backend-ingress
 spec:
   podSelector:
     matchLabels:
@@ -42,6 +41,7 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+    # From frontend pods
     - from:
         - podSelector:
             matchLabels:
@@ -49,13 +49,17 @@ spec:
       ports:
         - protocol: TCP
           port: 8000
+    # From ALB (health checks + routed traffic)
+    - ports:
+        - protocol: TCP
+          port: 8000
 
 ---
+# Backend egress: Supabase (443), OTel collector (4317), DNS (53)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-backend-egress
-  namespace: betmasterx
 spec:
   podSelector:
     matchLabels:
@@ -78,11 +82,11 @@ spec:
           port: 53
 
 ---
+# Frontend egress: backend API (8000), DNS (53)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-frontend-egress
-  namespace: betmasterx
 spec:
   podSelector:
     matchLabels:

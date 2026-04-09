@@ -101,8 +101,7 @@ frontend:
 ingress:
   enabled: true
   className: alb
-  host: betmasterx.example.com        # Replace with your domain
-  certificateArn: "arn:aws:acm:us-east-1:040342463442:certificate/CERT_ID"
+  groupName: betmasterx                # ALB group name
   scheme: internet-facing
   targetType: ip
 
