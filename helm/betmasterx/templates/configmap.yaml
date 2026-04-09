@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: betmasterx-config
-  namespace: betmasterx
+  # namespace: betmasterx
   labels:
     {{- include "betmasterx.labels" . | nindent 4 }}
 data:

@@ -4,7 +4,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: betmasterx-ingress
-  namespace: betmasterx
+  # namespace: betmasterx
   labels:
     {{- include "betmasterx.labels" . | nindent 4 }}
   annotations:

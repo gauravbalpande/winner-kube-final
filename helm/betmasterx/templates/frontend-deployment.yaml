@@ -4,7 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: betmasterx-frontend
-  namespace: betmasterx
+  # namespace: betmasterx
   labels:
     {{- include "betmasterx.labels" . | nindent 4 }}
     app.kubernetes.io/component: frontend

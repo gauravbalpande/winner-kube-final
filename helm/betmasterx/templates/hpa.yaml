@@ -5,7 +5,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: betmasterx-backend-hpa
-  namespace: betmasterx
+  # namespace: betmasterx
   labels:
     {{- include "betmasterx.labels" . | nindent 4 }}
     app.kubernetes.io/component: backend
