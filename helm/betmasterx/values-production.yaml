@@ -14,7 +14,7 @@ global:
 backend:
   replicaCount: 3           # Minimum 3 pods across 3 AZs in prod
   image:
-    tag: "v1.0.0"           # Pinned semantic version in production
+    tag: "v1.0.1"           # Pinned semantic version in production
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -30,7 +30,7 @@ backend:
 frontend:
   replicaCount: 3
   image:
-    tag: "v1.0.0"
+    tag: "v1.0.1"
     pullPolicy: IfNotPresent
   autoscaling:
     minReplicas: 3
