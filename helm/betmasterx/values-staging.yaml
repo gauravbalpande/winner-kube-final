@@ -10,7 +10,7 @@ global:
 backend:
   replicaCount: 2
   image:
-    tag: "staging"    # CI tags staging images differently
+    tag: "v2.0.0"    # CI tags staging images differently
   resources:
     requests:
       cpu: "200m"
@@ -24,7 +24,7 @@ backend:
 frontend:
   replicaCount: 2
   image:
-    tag: "staging"
+    tag: "v2.0.0"
 
 ingress:
   host: staging.betmasterx.example.com
