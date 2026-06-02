@@ -58,9 +58,9 @@ spec:
     # No automated: block — must manually click Sync in UI or use argocd CLI
 
   # Self-heal disabled in production — changes must go through git
-  ignoreDifferences:
-    - group: apps
-      kind: Deployment
-      jsonPointers:
-        - /spec/template/spec/containers/0/image
-        - /spec/template/spec/containers/1/image
+  # ignoreDifferences:
+  #   - group: apps
+  #     kind: Deployment
+  #     jsonPointers:
+  #       - /spec/template/spec/containers/0/image
+  #       - /spec/template/spec/containers/1/image
