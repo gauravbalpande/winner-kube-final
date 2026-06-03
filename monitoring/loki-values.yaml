@@ -6,6 +6,14 @@
 
 # Single binary mode — no microservices, minimal resource footprint
 deploymentMode: SingleBinary
+backend:
+  replicas: 0
+
+read:
+  replicas: 0
+
+write:
+  replicas: 0
 
 loki:
   commonConfig:
