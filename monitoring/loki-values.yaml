@@ -57,3 +57,9 @@ grafana:
 # MinIO — disabled (using filesystem storage)
 minio:
   enabled: false
+
+chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false
