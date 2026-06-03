@@ -67,3 +67,16 @@ nodeExporter:
 # kube-state-metrics — pod/deployment state
 kubeStateMetrics:
   enabled: true
+
+# EKS managed control plane components
+kubeEtcd:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeProxy:
+  enabled: false
